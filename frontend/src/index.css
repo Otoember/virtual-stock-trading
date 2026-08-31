@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, Arial, sans-serif;
+  background: #f5f7fb;
+  color: #1f2937;
+}
+
+a { color: inherit; text-decoration: none; }
+
+.layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.sidebar { background: #111827; color: #f9fafb; padding: 16px; }
+.nav-item { display: block; padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; }
+.nav-item:hover { background: #1f2937; }
+.content { padding: 20px; }
+.card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); margin-bottom: 16px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; }
+.input, .button, select { padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+.button { background: #2563eb; color: white; border: none; cursor: pointer; }
+.button.secondary { background: #4b5563; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { border-bottom: 1px solid #e5e7eb; padding: 8px; text-align: left; }
+.error { color: #dc2626; }
+.success { color: #16a34a; }
