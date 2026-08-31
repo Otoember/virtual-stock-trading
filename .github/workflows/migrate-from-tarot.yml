@@ -1,0 +1,48 @@
+name: One-time migrate A-stock platform from Tarot
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/migrate-from-tarot.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: target
+
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          repository: Otoember/Tarot
+          ref: copilot/a-stock-virtual-trading-platform
+          path: source
+
+      - name: Replace target contents with source branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='__pycache__/' \
+            --exclude='*.pyc' \
+            "$GITHUB_WORKSPACE/source/" "$GITHUB_WORKSPACE/target/"
+
+          cd "$GITHUB_WORKSPACE/target"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to migrate."
+            exit 0
+          fi
+          git commit -m "Migrate A-stock virtual trading platform from Otoember/Tarot"
+          git push origin HEAD:main
