@@ -1,3 +1,3 @@
-from app.api import auth, market, trading
+from app.api import auth, market, trading, risk
 
-__all__ = ['auth', 'market', 'trading']
+__all__ = ['auth', 'market', 'trading', 'risk']
