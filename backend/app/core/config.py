@@ -18,7 +18,9 @@ class Settings(BaseSettings):
 
     INITIAL_CASH: str = Field(default='1000000.00')
 
-    MARKET_PROVIDER: str = 'mock'
+    # Use real A-share data by default.
+    # Set MARKET_PROVIDER=mock when offline development is required.
+    MARKET_PROVIDER: str = 'akshare'
     SIMULATION_MARKET_DATA: bool = False
 
     ALLOW_OFF_HOURS_TRADING: bool = True
