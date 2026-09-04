@@ -11,7 +11,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    # bcrypt only supports passwords up to 72 bytes
+    # truncate before hashing to avoid runtime errors with newer bcrypt versions
+    return pwd_context.hash(password[:72])
 
 
 def create_access_token(subject: str) -> str:
