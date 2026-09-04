@@ -11,6 +11,7 @@ from app.models.entities import (
     User,
     UserStatus,
 )
+from app.models.market import Stock, StockPrice
 
 __all__ = [
     'User',
@@ -24,4 +25,6 @@ __all__ = [
     'OrderStatus',
     'OrderType',
     'UserStatus',
+    'Stock',
+    'StockPrice',
 ]
