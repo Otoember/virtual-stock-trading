@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from app.core.config import Settings, get_settings
+from app.core.exceptions import AppError
 from app.main import app
 from app.services.market_data import factory
 from app.services.market_data.akshare_provider import AKShareMarketDataProvider
@@ -25,7 +26,9 @@ def ak_provider(monkeypatch):
     ]
     ak = SimpleNamespace(stock_info_a_code_name=Mock(return_value=pd.DataFrame(rows)))
     monkeypatch.setattr(AKShareMarketDataProvider, '_import_akshare', staticmethod(lambda: ak))
-    return AKShareMarketDataProvider()
+    provider = AKShareMarketDataProvider()
+    yield provider
+    provider.cache.close()
 
 
 @pytest.fixture(autouse=True)
@@ -80,7 +83,7 @@ def test_normalize_and_refresh(ak_provider):
         {'code': None, 'name': None}, {'code': 'bad', 'name': '无效'},
     ])
     assert [s.symbol for s in ak_provider.search_stock('000')] == ['000001']
-    ak_provider._stock_pool_expires = 0
+    ak_provider.cache.invalidate('stock_pool')
     ak_provider.search_stock('000')
     assert ak_provider._ak.stock_info_a_code_name.call_count == 2
 
@@ -120,10 +123,12 @@ def test_chinese_column_compatibility(ak_provider):
     assert ak_provider.search_stock('宁德')[0].symbol == '300750'
 
 
-def test_quote_history_errors_logged(ak_provider, caplog):
-    ak_provider._ak.stock_zh_a_spot_em = Mock(side_effect=RuntimeError('quote failure'))
+def test_quote_history_errors_logged(ak_provider, caplog, monkeypatch):
+    ak_provider._ak.stock_individual_spot_xq = Mock(side_effect=RuntimeError('quote failure'))
+    monkeypatch.setattr('app.services.market_data.akshare_provider.get_tencent_quote', Mock(side_effect=RuntimeError('fallback failure')))
     ak_provider._ak.stock_zh_a_hist = Mock(side_effect=RuntimeError('history failure'))
-    assert ak_provider.get_quote('600519') is None
+    with pytest.raises(AppError, match='行情数据源暂时不可用'):
+        ak_provider.get_quote('600519')
     assert ak_provider.get_history('600519', date.today(), date.today()) == []
     assert 'quote failure' in caplog.text
     assert 'history failure' in caplog.text

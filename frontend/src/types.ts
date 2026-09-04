@@ -2,6 +2,7 @@ export type LoginPayload = { username: string; password: string }
 export type RegisterPayload = { username: string; email: string; password: string }
 
 export type Quote = {
+  source: string
   symbol: string
   name: string
   price: string

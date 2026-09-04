@@ -1,11 +1,15 @@
 from datetime import datetime, date, timezone
 from decimal import Decimal
 import logging
-from threading import Lock
 from time import monotonic
+from zoneinfo import ZoneInfo
+from requests.exceptions import Timeout as RequestTimeout
 
+from app.core.exceptions import AppError
 from app.schemas.market import MarketStatus, StockHistoryItem, StockQuote, StockSearchItem
 from app.services.market_data.base import MarketDataProvider
+from app.services.market_data.cache import CacheBusyError, MemoryTTLCache
+from app.services.market_data.tencent_quote import get_tencent_quote, market_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +23,11 @@ class AKShareMarketDataProvider(MarketDataProvider):
     name = 'akshare'
     STOCK_POOL_TTL = 3600
 
-    def __init__(self):
+    QUOTE_TTL = 60
+
+    def __init__(self, cache=None):
         self._ak = self._import_akshare()
-        self._stock_pool = None
-        self._stock_pool_expires = 0.0
-        self._stock_pool_lock = Lock()
+        self.cache = cache or MemoryTTLCache(ttl=self.QUOTE_TTL)
         self.available = None
 
     @staticmethod
@@ -31,27 +35,35 @@ class AKShareMarketDataProvider(MarketDataProvider):
         import akshare as ak
         return ak
 
+    def _timed(self, operation, fn):
+        start = monotonic()
+        try:
+            return fn()
+        finally:
+            logger.info('Market upstream operation=%s elapsed_ms=%.1f', operation, (monotonic() - start) * 1000)
+
+    def _fetch_stock_pool(self):
+        df = self._timed('akshare.stock_info_a_code_name', self._ak.stock_info_a_code_name)
+        if df.empty:
+            raise ValueError('AKShare returned an empty A-share stock pool')
+        df = df.rename(columns={
+            col: target for col, target in [('代码', 'code'), ('名称', 'name')]
+            if target not in df.columns
+        })
+        df = df[['code', 'name']].dropna().copy()
+        df['code'] = df['code'].astype(str).str.strip().str.zfill(6)
+        df['name'] = df['name'].astype(str).str.strip()
+        df = df[df['code'].str.fullmatch(r'\d{6}') & df['name'].ne('')]
+        if df.empty:
+            raise ValueError('AKShare stock pool contains no valid stocks')
+        df = df.drop_duplicates('code').sort_values('code')
+        logger.info('AKShare loaded %d A-share stocks', len(df))
+        return df
+
     def _load_stock_pool(self):
-        with self._stock_pool_lock:
-            if self._stock_pool is None or monotonic() >= self._stock_pool_expires:
-                df = self._ak.stock_info_a_code_name()
-                if df.empty:
-                    raise ValueError('AKShare returned an empty A-share stock pool')
-                df = df.rename(columns={
-                    col: target for col, target in [('代码', 'code'), ('名称', 'name')]
-                    if target not in df.columns
-                })
-                df = df[['code', 'name']].dropna().copy()
-                df['code'] = df['code'].astype(str).str.strip().str.zfill(6)
-                df['name'] = df['name'].astype(str).str.strip()
-                df = df[df['code'].str.fullmatch(r'\d{6}') & df['name'].ne('')]
-                if df.empty:
-                    raise ValueError('AKShare stock pool contains no valid stocks')
-                self._stock_pool = df.drop_duplicates('code').sort_values('code')
-                self._stock_pool_expires = monotonic() + self.STOCK_POOL_TTL
-                logger.info('AKShare loaded %d A-share stocks', len(self._stock_pool))
-            self.available = True
-            return self._stock_pool
+        df = self.cache.get_or_load('stock_pool', self._fetch_stock_pool, ttl=self.STOCK_POOL_TTL, timeout=45)
+        self.available = True
+        return df
 
     def is_available(self) -> bool:
         try:
@@ -63,25 +75,44 @@ class AKShareMarketDataProvider(MarketDataProvider):
             return False
 
     def get_quote(self, symbol: str) -> StockQuote | None:
-        ak = self._ak
-        if ak is None:
-            return None
-
         try:
-            df = ak.stock_zh_a_spot_em()
-            row = df[df["代码"].astype(str) == symbol].iloc[0]
-            return StockQuote(
-                symbol=symbol,
-                name=str(row["名称"]),
-                price=Decimal(str(row["最新价"])),
-                change=Decimal(str(row["涨跌额"])),
-                change_percent=Decimal(str(row["涨跌幅"])),
-                volume=int(row["成交量"]),
-                updated_at=datetime.now(timezone.utc),
-            )
+            market_symbol(symbol)
+        except ValueError:
+            return None
+        try:
+            return self.cache.get_or_load('quote:' + symbol, lambda: self._fetch_quote(symbol))
+        except (TimeoutError, RequestTimeout) as exc:
+            raise AppError('MARKET_DATA_TIMEOUT', '行情数据请求超时，请稍后重试', 504) from exc
+        except CacheBusyError as exc:
+            raise AppError('MARKET_DATA_BUSY', '行情服务繁忙，请稍后重试', 503) from exc
         except Exception as exc:
             logger.exception('AKShare error fetching quote for %s: %s', symbol, exc)
-            return None
+            raise AppError('MARKET_DATA_UNAVAILABLE', '行情数据源暂时不可用，请稍后重试', 503) from exc
+
+    def _fetch_quote(self, symbol: str) -> StockQuote:
+        try:
+            # A single-stock AKShare request, never the 5,000+ stock snapshot.
+            df = self._timed('akshare.stock_individual_spot_xq:' + symbol, lambda: self._ak.stock_individual_spot_xq(
+                symbol=market_symbol(symbol).upper(), timeout=1.2,
+            ))
+            row = dict(zip(df['item'], df['value']))
+            if row['代码'].upper() != market_symbol(symbol).upper():
+                raise ValueError('AKShare returned a different symbol')
+            timestamp = datetime.fromisoformat(str(row['时间']))
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=ZoneInfo('Asia/Shanghai'))
+            quote = StockQuote(
+                symbol=symbol, name=str(row['名称']), price=Decimal(str(row['现价'])),
+                change=Decimal(str(row['涨跌'])), change_percent=Decimal(str(row['涨幅'])),
+                volume=int(Decimal(str(row['成交量'])) / 100),  # Xueqiu shares -> lots
+                updated_at=timestamp, source='akshare-xueqiu',
+            )
+            if quote.price <= 0 or quote.volume < 0:
+                raise ValueError('AKShare quote is suspended or unavailable')
+            return quote
+        except Exception as exc:
+            logger.warning('AKShare single-stock quote failed symbol=%s; using Tencent fallback: %s', symbol, exc, exc_info=True)
+        return self._timed('tencent.single_quote:' + symbol, lambda: get_tencent_quote(symbol))
 
     def get_quotes(self, symbols: list[str]) -> list[StockQuote]:
         return [q for s in symbols if (q := self.get_quote(s))]
@@ -113,13 +144,13 @@ class AKShareMarketDataProvider(MarketDataProvider):
             return []
 
         try:
-            df = ak.stock_zh_a_hist(
+            df = self._timed('akshare.stock_zh_a_hist:' + symbol, lambda: ak.stock_zh_a_hist(
                 symbol=symbol,
                 period="daily",
                 start_date=start.strftime("%Y%m%d"),
                 end_date=end.strftime("%Y%m%d"),
                 adjust="qfq"
-            )
+            ))
 
             return [
                 StockHistoryItem(

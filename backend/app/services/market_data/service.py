@@ -27,7 +27,10 @@ class MarketDataService:
         return {'provider': self.provider.name, 'available': self.provider.is_available()}
 
     def quote(self, symbol: str):
-        return self.provider.get_quote(symbol)
+        result = self.provider.get_quote(symbol)
+        if result is None:
+            raise AppError('INVALID_SYMBOL', '股票代码无效或股票不存在', 404)
+        return result
 
     def history(self, symbol: str, start: date | None = None, end: date | None = None):
         end = end or date.today()

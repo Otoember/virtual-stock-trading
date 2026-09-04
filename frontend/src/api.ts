@@ -27,8 +27,8 @@ export async function search(keyword: string, signal?: AbortSignal): Promise<{ s
   return (await client.get('/market/search', { params: { keyword }, signal, timeout: 60000 })).data
 }
 
-export async function quote(symbol: string): Promise<Quote> {
-  return (await client.get(`/market/quote/${symbol}`)).data
+export async function quote(symbol: string, signal?: AbortSignal): Promise<Quote> {
+  return (await client.get(`/market/quote/${symbol}`, { signal, timeout: 5000 })).data
 }
 
 export async function history(symbol: string): Promise<{ date: string; close: string }[]> {

@@ -11,6 +11,7 @@ class StockQuote(BaseModel):
     change_percent: Decimal
     volume: int
     updated_at: datetime
+    source: str = 'mock'
 
 
 class StockSearchItem(BaseModel):

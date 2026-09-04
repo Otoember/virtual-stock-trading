@@ -1,6 +1,5 @@
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends
-from app.core.exceptions import AppError
 from app.schemas.market import MarketStatus, StockHistoryItem, StockQuote, StockSearchItem
 from app.services.market_data.factory import get_market_provider
 from app.services.market_data.service import MarketDataService
@@ -20,10 +19,7 @@ def provider_status(provider=Depends(get_market_provider)):
 
 @router.get('/quote/{symbol}', response_model=StockQuote)
 def quote(symbol: str, provider=Depends(get_market_provider)):
-    result = provider.get_quote(symbol)
-    if not result:
-        raise AppError('INVALID_SYMBOL', '股票不存在', 404)
-    return result
+    return MarketDataService(provider).quote(symbol)
 
 
 @router.get('/history/{symbol}', response_model=list[StockHistoryItem])

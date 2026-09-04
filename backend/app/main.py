@@ -6,6 +6,7 @@ from app.core.exceptions import AppError, app_error_handler, internal_error_hand
 from app.core.logging import setup_logging
 from app.db.base import Base
 from app.db.session import engine
+from app.services.market_data.factory import get_market_provider
 
 settings = get_settings()
 setup_logging()
@@ -31,6 +32,7 @@ app.include_router(risk.router, prefix=settings.API_PREFIX)
 @app.on_event('startup')
 def on_startup():
     Base.metadata.create_all(bind=engine)
+    get_market_provider()  # Import/initialize once; do not fetch market data at startup.
 
 
 @app.get('/healthz')
