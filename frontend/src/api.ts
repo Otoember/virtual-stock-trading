@@ -20,7 +20,7 @@ export async function login(payload: LoginPayload) {
 }
 
 export async function me() {
-  return (await client.get('/auth/me')).data
+  return (await client.get('/auth/me', { timeout: 10000 })).data
 }
 
 export async function search(keyword: string, signal?: AbortSignal): Promise<{ symbol: string; name: string }[]> {
@@ -39,9 +39,9 @@ export async function placeOrder(symbol: string, side: 'BUY' | 'SELL', quantity:
   return (await client.post('/orders', { symbol, side, quantity }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })).data
 }
 
-export async function getAccount(): Promise<Account> { return (await client.get('/account')).data }
-export async function getPortfolio(): Promise<Position[]> { return (await client.get('/portfolio')).data }
+export async function getAccount(): Promise<Account> { return (await client.get('/account', { timeout: 10000 })).data }
+export async function getPortfolio(): Promise<Position[]> { return (await client.get('/portfolio', { timeout: 10000 })).data }
 export async function getOrders(): Promise<Order[]> { return (await client.get('/orders')).data }
-export async function getTrades(): Promise<Trade[]> { return (await client.get('/trades')).data }
-export async function getAssetsHistory(): Promise<AssetSnapshot[]> { return (await client.get('/assets/history')).data }
+export async function getTrades(): Promise<Trade[]> { return (await client.get('/trades', { timeout: 10000 })).data }
+export async function getAssetsHistory(): Promise<AssetSnapshot[]> { return (await client.get('/assets/history', { timeout: 10000 })).data }
 export async function getLeaderboard(): Promise<LeaderboardRow[]> { return (await client.get('/leaderboard')).data }

@@ -1,53 +1,135 @@
-import { Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import Icon from './components/Icon'
 import { me } from './api'
 import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
 import MarketPage from './pages/MarketPage'
-import StockPage from './pages/StockPage'
 import PortfolioPage from './pages/PortfolioPage'
 import OrdersPage from './pages/OrdersPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const StockPage = lazy(() => import('./pages/StockPage'))
+
 function App() {
-  const [ready, setReady] = useState(false)
+  const [ready, setReady] = useState(() => !localStorage.getItem('token'))
   const [authed, setAuthed] = useState(false)
   const nav = useNavigate()
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     const token = localStorage.getItem('token')
-    if (!token) {
-      setReady(true)
-      return
+    if (!token) return
+    let active = true
+    me()
+      .then(() => {
+        if (active) setAuthed(true)
+      })
+      .catch(() => {
+        if (active) localStorage.removeItem('token')
+      })
+      .finally(() => {
+        if (active) setReady(true)
+      })
+    return () => {
+      active = false
     }
-    me().then(() => setAuthed(true)).catch(() => localStorage.removeItem('token')).finally(() => setReady(true))
   }, [])
 
-  if (!ready) return <div className="content">Loading...</div>
+  if (!ready)
+    return (
+      <div className="session-loading" role="status">
+        正在载入交易工作台…
+      </div>
+    )
 
-  if (!authed) return <LoginPage onAuth={() => { setAuthed(true); nav('/') }} />
+  if (!authed)
+    return (
+      <LoginPage
+        onAuth={() => {
+          queryClient.clear()
+          setAuthed(true)
+          nav('/')
+        }}
+      />
+    )
 
   return (
     <div className="layout">
+      <a className="skip-link" href="#main-content">
+        跳至主要内容
+      </a>
       <aside className="sidebar">
-        <h3>虚拟炒股</h3>
-        <Link className="nav-item" to="/">Dashboard</Link>
-        <Link className="nav-item" to="/market">行情</Link>
-        <Link className="nav-item" to="/portfolio">持仓</Link>
-        <Link className="nav-item" to="/orders">订单/成交</Link>
-        <Link className="nav-item" to="/leaderboard">排行榜</Link>
-        <button className="button secondary" onClick={() => { localStorage.removeItem('token'); setAuthed(false) }}>退出</button>
+        <NavLink className="brand" to="/" aria-label="虚拟炒股首页">
+          <span className="brand-mark">
+            <Icon name="market" />
+          </span>
+          <span>
+            虚拟炒股<small>TRADING WORKSPACE</small>
+          </span>
+        </NavLink>
+        <div className="nav-label">投资工作台</div>
+        <nav aria-label="主要导航">
+          <NavLink className="nav-item" to="/" end>
+            <Icon name="dashboard" />
+            账户总览
+          </NavLink>
+          <NavLink className="nav-item" to="/market">
+            <Icon name="market" />
+            市场行情
+          </NavLink>
+          <NavLink className="nav-item" to="/portfolio">
+            <Icon name="wallet" />
+            我的持仓
+          </NavLink>
+          <NavLink className="nav-item" to="/orders">
+            <Icon name="orders" />
+            订单与成交
+          </NavLink>
+          <NavLink className="nav-item" to="/leaderboard">
+            <Icon name="rank" />
+            收益排行
+          </NavLink>
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="simulation-card">
+            <Icon name="shield" />
+            <div>
+              模拟交易账户<small>专注练习，不连接真实券商</small>
+            </div>
+          </div>
+          <button
+            className="logout-button"
+            onClick={() => {
+              localStorage.removeItem('token')
+              queryClient.clear()
+              setAuthed(false)
+            }}
+          >
+            <Icon name="logout" />
+            退出登录
+          </button>
+        </div>
       </aside>
-      <main className="content">
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/market" element={<MarketPage />} />
-          <Route path="/stock/:symbol" element={<StockPage />} />
-          <Route path="/portfolio" element={<PortfolioPage />} />
-          <Route path="/orders" element={<OrdersPage />} />
-          <Route path="/leaderboard" element={<LeaderboardPage />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+      <main className="content" id="main-content" tabIndex={-1}>
+        <Suspense
+          fallback={
+            <div className="session-loading" role="status">
+              正在加载页面…
+            </div>
+          }
+        >
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/market" element={<MarketPage />} />
+            <Route path="/stock/:symbol" element={<StockPage />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   )
