@@ -18,6 +18,7 @@ class OrderSide(str, enum.Enum):
 
 class OrderType(str, enum.Enum):
     MARKET = 'MARKET'
+    LIMIT = 'LIMIT'
 
 
 class OrderStatus(str, enum.Enum):
@@ -98,12 +99,17 @@ class Order(Base):
     side: Mapped[OrderSide] = mapped_column(Enum(OrderSide), nullable=False)
     order_type: Mapped[OrderType] = mapped_column(Enum(OrderType), nullable=False, default=OrderType.MARKET)
     price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    limit_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     filled_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    remaining_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
     estimated_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     actual_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     fee: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal('0'))
+    reserved_cash: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal('0'))
+    rejection_reason: Mapped[str | None] = mapped_column(String(255))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

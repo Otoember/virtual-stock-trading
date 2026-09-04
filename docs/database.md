@@ -17,3 +17,11 @@ erDiagram
 - positions(user_id, symbol) 唯一
 - orders(user_id, idempotency_key) 唯一
 - daily_asset_snapshots(user_id, date) 唯一
+
+订单增强字段（Phase 2）：
+- order_type: MARKET / LIMIT
+- limit_price: 限价单价格
+- remaining_quantity: 未成交数量
+- reserved_cash: 买入限价单冻结资金
+- cancelled_at: 撤单时间
+- rejection_reason: 拒单原因

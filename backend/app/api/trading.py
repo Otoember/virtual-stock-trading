@@ -31,8 +31,31 @@ def place_order(
     if not idempotency_key:
         raise AppError('ORDER_DUPLICATED', '必须提供 Idempotency-Key', 400)
     engine = TradingEngine(provider)
-    order = engine.place_market_order(db, current_user, payload, idempotency_key)
+    order = engine.place_order(db, current_user, payload, idempotency_key)
     return OrderResponse.model_validate(order, from_attributes=True)
+
+
+@router.post('/orders/{order_id}/cancel', response_model=OrderResponse)
+def cancel_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    provider=Depends(get_market_provider),
+):
+    engine = TradingEngine(provider)
+    order = engine.cancel_order(db, current_user, order_id)
+    return OrderResponse.model_validate(order, from_attributes=True)
+
+
+@router.post('/orders/match', response_model=list[OrderResponse])
+def match_orders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    provider=Depends(get_market_provider),
+):
+    engine = TradingEngine(provider)
+    orders = engine.match_pending_orders(db, current_user)
+    return [OrderResponse.model_validate(x, from_attributes=True) for x in orders]
 
 
 @router.get('/orders', response_model=list[OrderResponse])

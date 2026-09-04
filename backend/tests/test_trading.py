@@ -62,3 +62,73 @@ def test_duplicate_order(client):
     assert one.status_code == 200
     assert two.status_code == 409
     assert two.json()['code'] == 'ORDER_DUPLICATED'
+
+
+def test_limit_buy_pending_and_cancel(client):
+    token = register_and_token(client, username='limit_buy')
+    place = client.post('/api/orders', json={
+        'symbol': '600519',
+        'side': 'BUY',
+        'order_type': 'LIMIT',
+        'quantity': 100,
+        'limit_price': '0.10',
+    }, headers={
+        'Authorization': 'Bearer ' + token,
+        'Idempotency-Key': 'lb1'
+    })
+    assert place.status_code == 200
+    order = place.json()
+    assert order['status'] == 'PENDING'
+    assert order['remaining_quantity'] == 100
+    assert float(order['reserved_cash']) > 0
+
+    before_cancel = client.get('/api/account', headers={'Authorization': 'Bearer ' + token}).json()
+    assert float(before_cancel['frozen_cash']) > 0
+
+    cancel = client.post(f"/api/orders/{order['id']}/cancel", headers={'Authorization': 'Bearer ' + token})
+    assert cancel.status_code == 200
+    assert cancel.json()['status'] == 'CANCELLED'
+
+    after_cancel = client.get('/api/account', headers={'Authorization': 'Bearer ' + token}).json()
+    assert float(after_cancel['frozen_cash']) == 0
+
+
+def test_limit_match_endpoint_keeps_unmatched_order(client):
+    token = register_and_token(client, username='limit_match')
+    place = client.post('/api/orders', json={
+        'symbol': '600519',
+        'side': 'BUY',
+        'order_type': 'LIMIT',
+        'quantity': 100,
+        'limit_price': '0.10',
+    }, headers={
+        'Authorization': 'Bearer ' + token,
+        'Idempotency-Key': 'lb2'
+    })
+    assert place.status_code == 200
+    order_id = place.json()['id']
+
+    match = client.post('/api/orders/match', headers={'Authorization': 'Bearer ' + token})
+    assert match.status_code == 200
+
+    orders = client.get('/api/orders', headers={'Authorization': 'Bearer ' + token}).json()
+    target = next(x for x in orders if x['id'] == order_id)
+    assert target['status'] == 'PENDING'
+
+
+def test_limit_buy_immediate_fill(client):
+    token = register_and_token(client, username='limit_fill')
+    place = client.post('/api/orders', json={
+        'symbol': '600519',
+        'side': 'BUY',
+        'order_type': 'LIMIT',
+        'quantity': 100,
+        'limit_price': '9999.99',
+    }, headers={
+        'Authorization': 'Bearer ' + token,
+        'Idempotency-Key': 'lb4'
+    })
+    assert place.status_code == 200
+    body = place.json()
+    assert body['status'] == 'FILLED'
+    assert body['filled_quantity'] == 100

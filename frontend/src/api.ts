@@ -35,9 +35,23 @@ export async function history(symbol: string): Promise<{ date: string; close: st
   return (await client.get(`/market/history/${symbol}`)).data
 }
 
-export async function placeOrder(symbol: string, side: 'BUY' | 'SELL', quantity: number) {
-  return (await client.post('/orders', { symbol, side, quantity }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })).data
+export async function placeOrder(
+  symbol: string,
+  side: 'BUY' | 'SELL',
+  quantity: number,
+  orderType: 'MARKET' | 'LIMIT' = 'MARKET',
+  limitPrice?: number,
+) {
+  return (await client.post('/orders', {
+    symbol,
+    side,
+    quantity,
+    order_type: orderType,
+    limit_price: orderType === 'LIMIT' ? limitPrice : undefined,
+  }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })).data
 }
+export async function cancelOrder(orderId: number) { return (await client.post(`/orders/${orderId}/cancel`)).data }
+export async function matchOrders() { return (await client.post('/orders/match')).data }
 
 export async function getAccount(): Promise<Account> { return (await client.get('/account')).data }
 export async function getPortfolio(): Promise<Position[]> { return (await client.get('/portfolio')).data }

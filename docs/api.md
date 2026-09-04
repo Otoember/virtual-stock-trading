@@ -8,6 +8,8 @@
 - GET /api/market/history/{symbol}
 - GET /api/market/status
 - POST /api/orders
+- POST /api/orders/{order_id}/cancel
+- POST /api/orders/match
 - GET /api/orders
 - GET /api/trades
 - GET /api/portfolio

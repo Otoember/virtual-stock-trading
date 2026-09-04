@@ -40,11 +40,17 @@ export type Order = {
   symbol: string
   stock_name: string
   side: string
+  order_type: string
   price: string
+  limit_price?: string | null
   quantity: number
+  filled_quantity: number
+  remaining_quantity: number
   status: string
   actual_amount: string
   fee: string
+  reserved_cash?: string
+  cancelled_at?: string | null
   created_at: string
 }
 

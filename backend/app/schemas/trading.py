@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 class PlaceOrderRequest(BaseModel):
     symbol: str = Field(min_length=6, max_length=6)
     side: str
+    order_type: str = Field(default='MARKET')
     quantity: int = Field(gt=0)
+    limit_price: Decimal | None = None
 
 
 class OrderResponse(BaseModel):
@@ -14,11 +16,18 @@ class OrderResponse(BaseModel):
     symbol: str
     stock_name: str
     side: str
+    order_type: str
     price: Decimal
+    limit_price: Decimal | None
     quantity: int
+    filled_quantity: int
+    remaining_quantity: int
     status: str
     actual_amount: Decimal
     fee: Decimal
+    reserved_cash: Decimal
+    rejection_reason: str | None
+    cancelled_at: datetime | None
     created_at: datetime
 
 
