@@ -4,6 +4,11 @@ from app.schemas.market import StockHistoryItem, StockQuote, StockSearchItem, Ma
 
 
 class MarketDataProvider(ABC):
+    name = 'unknown'
+
+    def is_available(self) -> bool:
+        return True
+
     @abstractmethod
     def get_quote(self, symbol: str) -> StockQuote | None:
         raise NotImplementedError

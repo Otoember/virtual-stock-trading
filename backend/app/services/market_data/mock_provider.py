@@ -14,6 +14,8 @@ MOCK_STOCKS = {
 
 
 class MockMarketDataProvider(MarketDataProvider):
+    name = 'mock'
+
     def _quote(self, symbol: str) -> StockQuote | None:
         name = MOCK_STOCKS.get(symbol)
         if not name:

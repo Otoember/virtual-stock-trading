@@ -16,8 +16,8 @@ services:
       DATABASE_URL: postgresql+psycopg://trading:${POSTGRES_PASSWORD:-trading}@db:5432/trading
       JWT_SECRET_KEY: change-me
       INITIAL_CASH: 1000000.00
-      MARKET_PROVIDER: mock
-      SIMULATION_MARKET_DATA: 'true'
+      MARKET_PROVIDER: ${MARKET_PROVIDER:-akshare}
+      SIMULATION_MARKET_DATA: 'false'
       ALLOW_OFF_HOURS_TRADING: 'true'
     depends_on:
       - db

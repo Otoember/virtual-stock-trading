@@ -1,6 +1,8 @@
 from datetime import datetime, date, timezone
 from decimal import Decimal
 import logging
+from threading import Lock
+from time import monotonic
 
 from app.schemas.market import MarketStatus, StockHistoryItem, StockQuote, StockSearchItem
 from app.services.market_data.base import MarketDataProvider
@@ -9,18 +11,59 @@ logger = logging.getLogger(__name__)
 
 
 class AKShareMarketDataProvider(MarketDataProvider):
-    """AKShare数据适配层。"""
+    """AKShare数据适配层。
 
-    def _import_akshare(self):
+    股票池按需加载并在进程内缓存一小时，不回退到模拟搜索结果。
+    """
+
+    name = 'akshare'
+    STOCK_POOL_TTL = 3600
+
+    def __init__(self):
+        self._ak = self._import_akshare()
+        self._stock_pool = None
+        self._stock_pool_expires = 0.0
+        self._stock_pool_lock = Lock()
+        self.available = None
+
+    @staticmethod
+    def _import_akshare():
+        import akshare as ak
+        return ak
+
+    def _load_stock_pool(self):
+        with self._stock_pool_lock:
+            if self._stock_pool is None or monotonic() >= self._stock_pool_expires:
+                df = self._ak.stock_info_a_code_name()
+                if df.empty:
+                    raise ValueError('AKShare returned an empty A-share stock pool')
+                df = df.rename(columns={
+                    col: target for col, target in [('代码', 'code'), ('名称', 'name')]
+                    if target not in df.columns
+                })
+                df = df[['code', 'name']].dropna().copy()
+                df['code'] = df['code'].astype(str).str.strip().str.zfill(6)
+                df['name'] = df['name'].astype(str).str.strip()
+                df = df[df['code'].str.fullmatch(r'\d{6}') & df['name'].ne('')]
+                if df.empty:
+                    raise ValueError('AKShare stock pool contains no valid stocks')
+                self._stock_pool = df.drop_duplicates('code').sort_values('code')
+                self._stock_pool_expires = monotonic() + self.STOCK_POOL_TTL
+                logger.info('AKShare loaded %d A-share stocks', len(self._stock_pool))
+            self.available = True
+            return self._stock_pool
+
+    def is_available(self) -> bool:
         try:
-            import akshare as ak
-            return ak
-        except ImportError:
-            logger.error("AKShare未安装")
-            return None
+            self._load_stock_pool()
+            return True
+        except Exception as exc:
+            self.available = False
+            logger.exception('AKShare error checking stock pool: %s', exc)
+            return False
 
     def get_quote(self, symbol: str) -> StockQuote | None:
-        ak = self._import_akshare()
+        ak = self._ak
         if ak is None:
             return None
 
@@ -36,51 +79,36 @@ class AKShareMarketDataProvider(MarketDataProvider):
                 volume=int(row["成交量"]),
                 updated_at=datetime.now(timezone.utc),
             )
-        except Exception as e:
-            logger.exception("获取股票行情失败 %s: %s", symbol, e)
+        except Exception as exc:
+            logger.exception('AKShare error fetching quote for %s: %s', symbol, exc)
             return None
 
     def get_quotes(self, symbols: list[str]) -> list[StockQuote]:
         return [q for s in symbols if (q := self.get_quote(s))]
 
     def search_stock(self, keyword: str) -> list[StockSearchItem]:
-        ak = self._import_akshare()
-        if ak is None:
+        keyword = keyword.strip()
+        if not keyword:
             return []
 
         try:
-            df = ak.stock_info_a_code_name()
-
-            # 兼容AKShare字段变化
-            code_col = "code" if "code" in df.columns else "代码"
-            name_col = "name" if "name" in df.columns else "名称"
-
-            df[code_col] = df[code_col].astype(str)
-            df[name_col] = df[name_col].astype(str)
-
+            df = self._load_stock_pool()
             result = df[
-                df[code_col].str.contains(keyword, na=False)
-                | df[name_col].str.contains(keyword, na=False)
+                df['name'].str.contains(keyword, na=False, regex=False, case=False)
+                | df['code'].str.contains(keyword, na=False, regex=False)
             ]
-
-            return [
-                StockSearchItem(
-                    symbol=str(r[code_col]),
-                    name=str(r[name_col])
-                )
-                for _, r in result.head(50).iterrows()
-            ]
-
-        except Exception as e:
-            logger.exception("股票搜索失败 keyword=%s: %s", keyword, e)
+            return [StockSearchItem(symbol=r['code'], name=r['name']) for _, r in result.head(50).iterrows()]
+        except Exception as exc:
+            self.available = False
+            logger.exception('AKShare error searching stocks for %r: %s', keyword, exc)
             return []
 
     def get_stock_info(self, symbol: str) -> StockSearchItem | None:
         items = self.search_stock(symbol)
-        return items[0] if items else None
+        return next((item for item in items if item.symbol == symbol), None)
 
     def get_history(self, symbol: str, start: date, end: date) -> list[StockHistoryItem]:
-        ak = self._import_akshare()
+        ak = self._ak
         if ak is None:
             return []
 
@@ -104,8 +132,8 @@ class AKShareMarketDataProvider(MarketDataProvider):
                 )
                 for _, r in df.iterrows()
             ]
-        except Exception as e:
-            logger.exception("历史行情获取失败 %s: %s", symbol, e)
+        except Exception as exc:
+            logger.exception('AKShare error fetching history for %s: %s', symbol, exc)
             return []
 
     def get_market_status(self) -> MarketStatus:

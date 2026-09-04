@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from app.core.exceptions import AppError
 from app.services.market_data.factory import get_market_provider
 
 
@@ -14,7 +15,16 @@ class MarketDataService:
         self.provider = provider or get_market_provider()
 
     def search(self, keyword: str):
-        return self.provider.search_stock(keyword)
+        keyword = keyword.strip()
+        if not keyword:
+            return []
+        result = self.provider.search_stock(keyword)
+        if getattr(self.provider, 'available', None) is False:
+            raise AppError('MARKET_DATA_UNAVAILABLE', 'A股数据源暂时不可用，请稍后重试', 503)
+        return result
+
+    def provider_status(self):
+        return {'provider': self.provider.name, 'available': self.provider.is_available()}
 
     def quote(self, symbol: str):
         return self.provider.get_quote(symbol)

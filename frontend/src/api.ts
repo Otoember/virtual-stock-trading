@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type { Account, AssetSnapshot, LeaderboardRow, LoginPayload, Order, Position, Quote, RegisterPayload, Trade } from './types'
 
-const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api'
+const baseURL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export const client = axios.create({ baseURL })
 
@@ -23,8 +23,8 @@ export async function me() {
   return (await client.get('/auth/me')).data
 }
 
-export async function search(keyword: string) {
-  return (await client.get('/market/search', { params: { keyword } })).data
+export async function search(keyword: string, signal?: AbortSignal): Promise<{ symbol: string; name: string }[]> {
+  return (await client.get('/market/search', { params: { keyword }, signal, timeout: 60000 })).data
 }
 
 export async function quote(symbol: string): Promise<Quote> {

@@ -3,13 +3,19 @@ from fastapi import APIRouter, Depends
 from app.core.exceptions import AppError
 from app.schemas.market import MarketStatus, StockHistoryItem, StockQuote, StockSearchItem
 from app.services.market_data.factory import get_market_provider
+from app.services.market_data.service import MarketDataService
 
 router = APIRouter(prefix='/market', tags=['market'])
 
 
 @router.get('/search', response_model=list[StockSearchItem])
 def search(keyword: str, provider=Depends(get_market_provider)):
-    return provider.search_stock(keyword)
+    return MarketDataService(provider).search(keyword)
+
+
+@router.get('/provider')
+def provider_status(provider=Depends(get_market_provider)):
+    return MarketDataService(provider).provider_status()
 
 
 @router.get('/quote/{symbol}', response_model=StockQuote)
