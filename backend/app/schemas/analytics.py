@@ -9,3 +9,10 @@ class IndicatorRequest(BaseModel):
 class IndicatorResponse(BaseModel):
     name: str
     values: list[float | None]
+
+
+class RiskRequest(BaseModel):
+    """Portfolio value history for risk evaluation."""
+
+    values: list[float]
+    risk_free_rate: float = 0.0
