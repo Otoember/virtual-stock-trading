@@ -123,7 +123,7 @@ def test_limit_buy_immediate_fill(client):
         'side': 'BUY',
         'order_type': 'LIMIT',
         'quantity': 100,
-        'limit_price': '9999.99',
+        'limit_price': '1000.00',
     }, headers={
         'Authorization': 'Bearer ' + token,
         'Idempotency-Key': 'lb4'
