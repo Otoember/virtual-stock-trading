@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, market, trading
+from app.api import auth, market, trading, risk
 from app.core.config import get_settings
 from app.core.exceptions import AppError, app_error_handler, internal_error_handler
 from app.core.logging import setup_logging
@@ -25,6 +25,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix=settings.API_PREFIX)
 app.include_router(market.router, prefix=settings.API_PREFIX)
 app.include_router(trading.router, prefix=settings.API_PREFIX)
+app.include_router(risk.router, prefix=settings.API_PREFIX)
 
 
 @app.on_event('startup')
